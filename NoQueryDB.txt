@@ -1,0 +1,225 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+
+public class NoQueryDB extends JFrame {
+    
+	//Variables initializing
+	private JTextField tableNameField;
+    private JTextArea attributesArea;
+    private JTextArea insertValuesArea;
+    private JTextArea resultArea;
+
+    private Connection connection;
+    private Statement statement;
+
+    public NoQueryDB() {
+        initializeUI();
+        setupDatabaseConnection();
+    }
+
+    private void initializeUI() {
+        // Initialize UI components
+        tableNameField = new JTextField(20);
+        attributesArea = new JTextArea(10, 20);
+        insertValuesArea = new JTextArea(5, 20);
+        resultArea = new JTextArea(10, 40);
+
+
+        // Create buttons with labels
+        JButton createButton = new JButton("Create Table");
+        JButton readButton = new JButton("Read Table Contents");
+        JButton insertButton = new JButton("Insert Values");
+        JButton exitButton = new JButton("Exit");
+        JButton dropButton = new JButton("Drop Table");
+
+        // Create and configure UI layout
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.insets = new Insets(5, 10, 5, 10); // Add margin and padding
+
+        // Row 1
+        constraints.gridx = 0;
+        constraints.gridy = 0;
+        constraints.anchor = GridBagConstraints.WEST;
+        panel.add(new JLabel("Table Name:"), constraints);
+        constraints.gridx = 1;
+        panel.add(tableNameField, constraints);
+
+        // Row 2
+        constraints.gridy = 1;
+        constraints.gridx = 0;
+        panel.add(new JLabel("Attributes (comma-separated):"), constraints);
+        constraints.gridx = 1;
+        panel.add(new JScrollPane(attributesArea), constraints);
+        getContentPane().setBackground(Color.BLACK); 
+
+        // Row 3 (Buttons in one row)
+        JPanel buttonRowPanel = new JPanel();
+        buttonRowPanel.add(createButton);
+        buttonRowPanel.add(readButton);
+        buttonRowPanel.add(insertButton);
+        buttonRowPanel.add(dropButton);
+        buttonRowPanel.add(exitButton);
+        constraints.gridy = 2;
+        constraints.gridx = 0;
+        constraints.gridwidth = 2;
+        panel.add(buttonRowPanel, constraints);
+        
+        // Row 4
+        constraints.gridy = 3;
+        constraints.gridwidth = 2;
+        panel.add(new JLabel("Insert Values (comma-separated):"), constraints);
+
+        // Row 5
+        constraints.gridy = 4;
+        constraints.gridwidth = 2;
+        panel.add(new JScrollPane(insertValuesArea), constraints);
+
+        // Row 6
+        constraints.gridy = 5;
+        constraints.gridwidth = 2;
+        panel.add(new JLabel("Result:"), constraints);
+
+        // Row 7
+        constraints.gridy = 6;
+        constraints.gridwidth = 2;
+        panel.add(new JScrollPane(resultArea), constraints);
+
+        // Configure main frame
+        setTitle("NO QUERY DATABASE");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        getContentPane().add(panel, BorderLayout.CENTER);
+        pack();
+
+        // Button actions
+        createButton.addActionListener(e -> createTable());
+        readButton.addActionListener(e -> readTableContents());
+        insertButton.addActionListener(e -> insertValues());
+        dropButton.addActionListener(e -> dropTable());
+        exitButton.addActionListener(e -> System.exit(0));
+    }
+    //setting database connection (oracle)
+    private void setupDatabaseConnection() {
+        String jdbcUrl = "jdbc:oracle:thin:@localhost:1521:xe";
+        String username = "system";
+        String password = "4327";
+
+        try {
+            connection = DriverManager.getConnection(jdbcUrl, username, password);
+            statement = connection.createStatement();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void createTable() {
+        String tableName = tableNameField.getText().trim();
+        String attributes = attributesArea.getText().trim();
+
+        if (tableName.isEmpty() || attributes.isEmpty()) {
+            resultArea.setText("Table name and attributes are required.");
+            return;
+        }
+
+        try {
+            String createTableSQL = "CREATE TABLE " + tableName + " (" + attributes + ")";
+            statement.executeUpdate(createTableSQL);
+            resultArea.setText("Table created successfully.");
+        } catch (SQLException e) {
+            resultArea.setText("Error: " + e.getMessage());
+        }
+    }
+
+    private void readTableContents() {
+        String tableName = tableNameField.getText().trim();
+
+        if (tableName.isEmpty()) {
+            resultArea.setText("Table name is required.");
+            return;
+        }
+
+        try {
+            ResultSet resultSet = statement.executeQuery("SELECT * FROM " + tableName);
+            ResultSetMetaData metaData = resultSet.getMetaData();
+            int columnCount = metaData.getColumnCount();
+
+            if (!resultSet.next()) {
+                resultArea.setText("Table is empty.");
+                return;
+            }
+
+            StringBuilder content = new StringBuilder();
+            do {
+                for (int i = 1; i <= columnCount; i++) {
+                    content.append(metaData.getColumnName(i)).append(": ").append(resultSet.getString(i)).append("\n");
+                }
+                content.append("\n");
+            } while (resultSet.next());
+
+            // Clear the result area and then set the new content
+            resultArea.setText("");
+            resultArea.setText(content.toString());
+        } catch (SQLException e) {
+            resultArea.setText("Error: " + e.getMessage());
+        }
+    }
+
+    private void insertValues() {
+        String tableName = tableNameField.getText().trim();
+        String insertValues = insertValuesArea.getText().trim();
+
+        if (tableName.isEmpty() || insertValues.isEmpty()) {
+            resultArea.setText("Table name and values are required.");
+            return;
+        }
+
+        try {
+            ResultSet resultSet = statement.executeQuery("SELECT * FROM " + tableName + " WHERE 1=0");
+            ResultSetMetaData metaData = resultSet.getMetaData();
+            int columnCount = metaData.getColumnCount();
+
+            String[] values = insertValues.split(",");
+            if (values.length != columnCount) {
+                resultArea.setText("Number of values must match the number of columns.");
+                return;
+            }
+
+            StringBuilder insertSQL = new StringBuilder("INSERT INTO " + tableName + " VALUES (");
+            for (int i = 0; i < columnCount; i++) {
+                if (i > 0) {
+                    insertSQL.append(", ");
+                }
+                insertSQL.append(values[i].trim());
+            }
+            insertSQL.append(")");
+
+            statement.executeUpdate(insertSQL.toString());
+            resultArea.setText("Values inserted successfully.");
+        } catch (SQLException e) {
+            resultArea.setText("Error: " + e.getMessage());
+        }
+    }
+
+    private void dropTable() {
+        String tableName = tableNameField.getText().trim();
+
+        if (tableName.isEmpty()) {
+            resultArea.setText("Table name is required.");
+            return;
+        }
+
+        try {
+            String dropTableSQL = "DROP TABLE " + tableName;
+            statement.executeUpdate(dropTableSQL);
+            resultArea.setText("Table dropped successfully.");
+        } catch (SQLException e) {
+            resultArea.setText("Error dropping table: " + e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new NoQueryDB().setVisible(true));
+    }
+}
